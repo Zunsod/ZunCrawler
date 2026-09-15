@@ -21,7 +21,7 @@ HEADERS = {
 session = requests.Session()
 session.headers.update(HEADERS)
 
-BATCHES_PER_RUN = 2   
+BATCHES_PER_RUN = 12   
 
 # ── 1. Явцаа DB-ээс уншина ──
 progress = supabase.table("scrape_progress").select("*").eq("id", 1).execute().data[0]
