@@ -2,12 +2,15 @@ name: Zangia Backfill
 
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "7,37 * * * *" # нөөц хамгаалалт болгож үлдээв, gh CLI үндсэн механизм
   workflow_dispatch:
+
+permissions:
+  actions: write # gh workflow run дуудахад заавал хэрэгтэй
 
 concurrency:
   group: zangia-backfill
-  cancel-in-progress: false # хэрэв өмнөх ажиллагаа арай дуусаагүй бол дараагийнхыг дараалалд оруулна
+  cancel-in-progress: false
 
 jobs:
   scrape:
@@ -15,11 +18,36 @@ jobs:
     timeout-minutes: 28
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - run: pip install -r requirements.txt
-      - run: python scraper.py
+
+      - name: Run scraper
+        run: python scraper.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Check if backfill is done
+        id: check_status
+        run: |
+          STATUS=$(python3 -c "
+          import os
+          from supabase import create_client
+          sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+          r = sb.table('scrape_progress').select('status').eq('id', 1).execute()
+          print(r.data[0]['status'])
+          ")
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Trigger next run
+        if: steps.check_status.outputs.status != 'done'
+        run: gh workflow run backfill.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
