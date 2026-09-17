@@ -1,5 +1,4 @@
 import os
-import math
 import time
 import random
 from datetime import datetime, timezone
@@ -23,7 +22,9 @@ session = requests.Session()
 session.headers.update(HEADERS)
 
 CHUNK = 200
+MAX_PAGES = 400
 CLOSE_RATIO_LIMIT = 0.20
+MIN_COVERAGE = 0.90
 
 started_at = datetime.now(timezone.utc)
 now_iso = started_at.isoformat()
@@ -48,37 +49,35 @@ print(f"DB: нийт {len(db_codes)} | идэвхтэй {len(active_in_db)} | и
 seen_items = {}
 failed_pages = []
 expected_pages = None
+api_total = None
 page = 1
 
-while True:
-    if expected_pages and page > expected_pages:
-        break
-
+while page <= MAX_PAGES:
     params = {"limit": 90, "page": page, "isSortByJobs": "true", "time": 1}
     page_ok = False
+    last_page_reached = False
 
     for attempt in range(3):
         try:
             res = session.get(SEARCH_API, params=params, timeout=20)
             if res.status_code == 200:
                 data = res.json()
+                meta = data.get("meta", {})
 
                 if expected_pages is None:
-                    total = data.get("meta", {}).get("total")
-                    if total:
-                        expected_pages = math.ceil(total / 90)
-                        print(f"zangia: нийт {total} зар — {expected_pages} хуудас")
+                    api_total = meta.get("total")
+                    expected_pages = meta.get("totalPages")
+                    print(f"zangia: нийт {api_total} зар — {expected_pages} хуудас")
 
                 items = data.get("items", [])
-                if not items:
-                    expected_pages = page - 1
-                    page_ok = True
-                    break
-
                 for item in items:
                     code = item.get("code")
                     if code:
                         seen_items[code] = item
+
+                if not items or not meta.get("hasNextPage"):
+                    last_page_reached = True
+
                 page_ok = True
                 break
 
@@ -98,10 +97,14 @@ while True:
         print(f"\n[page {page}] амжилтгүй — тэмдэглээд цааш явна.")
 
     print(f"\rPage {page}/{expected_pages or '?'} — цугласан: {len(seen_items)}", end="", flush=True)
+
+    if last_page_reached:
+        break
+
     page += 1
     time.sleep(1.2)
 
-pages_scanned = page - 1
+pages_scanned = page
 
 # ══ 3. Амжилтгүй хуудсуудыг дахин оролдоно ══
 if failed_pages:
@@ -110,7 +113,9 @@ if failed_pages:
     for p in failed_pages:
         time.sleep(10)
         try:
-            res = session.get(SEARCH_API, params={"limit": 90, "page": p, "isSortByJobs": "true", "time": 1}, timeout=25)
+            res = session.get(SEARCH_API,
+                              params={"limit": 90, "page": p, "isSortByJobs": "true", "time": 1},
+                              timeout=25)
             if res.status_code == 200:
                 for item in res.json().get("items", []):
                     code = item.get("code")
@@ -124,8 +129,9 @@ if failed_pages:
             still_failed.append(p)
     failed_pages = still_failed
 
-scan_completed = (len(failed_pages) == 0)
-print(f"\nScan {'БҮРЭН' if scan_completed else 'ДУТУУ'} — zangia дээр {len(seen_items)} зар")
+coverage = len(seen_items) / api_total if api_total else 0
+scan_completed = (len(failed_pages) == 0) and (coverage >= MIN_COVERAGE)
+print(f"\nScan {'БҮРЭН' if scan_completed else 'ДУТУУ'} — {len(seen_items)}/{api_total} ({coverage:.0%})")
 
 # ══ 4. Set үйлдлээр 3 бүлэг ялгана ══
 today_codes = set(seen_items.keys())
@@ -173,14 +179,17 @@ for idx, code in enumerate(new_codes, 1):
 
 # ══ 6. ДАХИН НЭЭГДСЭН зар ══
 if reopened:
-    rows = supabase.table("raw_jobs").select("job_code, reopen_count") \
-        .in_("job_code", list(reopened)).execute().data
-    for r in rows:
-        supabase.table("raw_jobs").update({
-            "is_active": True,
-            "closed_at": None,
-            "reopen_count": (r.get("reopen_count") or 0) + 1
-        }).eq("job_code", r["job_code"]).execute()
+    reopened_list = list(reopened)
+    for i in range(0, len(reopened_list), CHUNK):
+        batch = reopened_list[i:i+CHUNK]
+        rows = supabase.table("raw_jobs").select("job_code, reopen_count") \
+            .in_("job_code", batch).execute().data
+        for r in rows:
+            supabase.table("raw_jobs").update({
+                "is_active": True,
+                "closed_at": None,
+                "reopen_count": (r.get("reopen_count") or 0) + 1
+            }).eq("job_code", r["job_code"]).execute()
     print(f"\n{len(reopened)} зар дахин нээгдлээ.")
 
 # ══ 7. ХААГДСАН зар — зөвхөн бүрэн scan + sanity check давбал ══
@@ -200,7 +209,7 @@ if scan_completed:
         closed_applied = len(closed_list)
         print(f"{closed_applied} зарыг идэвхгүй болголоо ({ratio:.1%}).")
 else:
-    print(f"Scan дутуу ({len(failed_pages)} хуудас) — closure update алгасав.")
+    print(f"Scan дутуу — closure update алгасав.")
 
 # ══ 8. scan_runs-д нэг мөр бичнэ ══
 supabase.table("scan_runs").insert({
