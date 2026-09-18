@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import random
 from datetime import datetime, timezone
@@ -25,6 +26,62 @@ CHUNK = 200
 MAX_PAGES = 400
 CLOSE_RATIO_LIMIT = 0.20
 MIN_COVERAGE = 0.90
+
+# ══ 0. PII цэвэрлэгээ ══════════════════════════════════════════════
+# Хувь хүнийг таних боломжтой мэдээллийг DB-д орохоос ӨМНӨ хасна.
+
+PHONE = re.compile(r"\b\d{4}[\s-]?\d{4}\b")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+
+# Бүтнээр нь хасах талбарууд
+DETAIL_DROP = ("contact", "similarJobs", "is_applicant",
+               "logo", "for_hbi", "for_hbi_type", "is_featured",
+               "changeable", "mentorshipProgram", "mlevel")
+
+COMPANY_DROP = ("emails", "phone",
+                "header", "banners", "logo", "mlevel", "group_id",
+                "facebook", "twitter", "instagram", "youtube",
+                "slogan", "vision", "mission", "valuable")
+
+LIST_DROP = ("contact", "search_description", "search_requirements",
+             "search_main", "logo", "is_featured", "changeable", "mlevel")
+# Дотор нь утас, имэйл mask хийх текст талбарууд
+TEXT_FIELDS = ("description", "requirements", "additional")
+
+
+def mask_text(value):
+    if not isinstance(value, str):
+        return value
+    return EMAIL.sub("[email]", PHONE.sub("[phone]", value))
+
+
+def clean_list_item(item):
+    """search API-гаас ирсэн нэг зарын мөрийг цэвэрлэнэ."""
+    if not isinstance(item, dict):
+        return item
+    for key in LIST_DROP:
+        item.pop(key, None)
+    return item
+
+
+def clean_detail(detail):
+    """detail API-гаас ирсэн бүтэн payload-ийг цэвэрлэнэ."""
+    if not isinstance(detail, dict):
+        return detail
+    for key in DETAIL_DROP:
+        detail.pop(key, None)
+
+    company = detail.get("company")
+    if isinstance(company, dict):
+        for key in COMPANY_DROP:
+            company.pop(key, None)
+
+    for field in TEXT_FIELDS:
+        if field in detail:
+            detail[field] = mask_text(detail[field])
+
+    return detail
+
 
 started_at = datetime.now(timezone.utc)
 now_iso = started_at.isoformat()
@@ -73,7 +130,7 @@ while page <= MAX_PAGES:
                 for item in items:
                     code = item.get("code")
                     if code:
-                        seen_items[code] = item
+                        seen_items[code] = clean_list_item(item)
 
                 if not items or not meta.get("hasNextPage"):
                     last_page_reached = True
@@ -120,7 +177,7 @@ if failed_pages:
                 for item in res.json().get("items", []):
                     code = item.get("code")
                     if code:
-                        seen_items[code] = item
+                        seen_items[code] = clean_list_item(item)
                 print(f"  page {p} сэргээлээ.")
             else:
                 still_failed.append(p)
@@ -142,6 +199,8 @@ reopened = today_codes & inactive_in_db
 print(f"Шинэ: {len(new_codes)} | Хаагдсан: {len(newly_closed)} | Дахин нээгдсэн: {len(reopened)}")
 
 # ══ 5. ШИНЭ зар — detail татаж бүрэн insert ══
+detail_failed = []
+
 for idx, code in enumerate(new_codes, 1):
     item = seen_items[code]
     detail_payload = None
@@ -150,8 +209,7 @@ for idx, code in enumerate(new_codes, 1):
         try:
             detail_res = session.get(f"{DETAIL_API_BASE}{code}", timeout=20)
             if detail_res.status_code == 200:
-                detail_payload = detail_res.json()
-                detail_payload.pop("similarJobs", None)
+                detail_payload = clean_detail(detail_res.json())
                 break
             elif detail_res.status_code == 429:
                 print(f"\n[Rate Limit] 30 сек хүлээж байна...")
@@ -161,6 +219,14 @@ for idx, code in enumerate(new_codes, 1):
         except Exception as e:
             print(f"\n[{code}] Оролдлого {attempt+1}/3: {e}")
             time.sleep(5)
+
+    # detail татаж чадаагүй бол огт бичихгүй — маргааш дахин "шинэ" гэж
+    # тооцогдож, өөрөө дахин оролдоно.
+    if detail_payload is None:
+        detail_failed.append(code)
+        print(f"\n[{code}] detail татагдсангүй — маргааш дахин оролдоно.")
+        time.sleep(random.uniform(1.0, 1.6))
+        continue
 
     posted_at = None
     if item.get("time"):
@@ -176,6 +242,10 @@ for idx, code in enumerate(new_codes, 1):
 
     print(f"\r  Шинэ зар: [{idx}/{len(new_codes)}]", end="", flush=True)
     time.sleep(random.uniform(1.0, 1.6))
+
+inserted = len(new_codes) - len(detail_failed)
+if detail_failed:
+    print(f"\n{len(detail_failed)} зарын detail татагдаагүй тул бичигдсэнгүй.")
 
 # ══ 6. ДАХИН НЭЭГДСЭН зар ══
 if reopened:
@@ -218,7 +288,7 @@ supabase.table("scan_runs").insert({
     "pages_scanned": pages_scanned,
     "failed_pages": len(failed_pages),
     "seen_count": len(seen_items),
-    "new_count": len(new_codes),
+    "new_count": inserted,
     "closed_count": closed_applied,
     "reopened_count": len(reopened),
     "scan_completed": scan_completed
