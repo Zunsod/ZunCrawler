@@ -1,0 +1,18 @@
+name: daily-worki-lambda
+
+on:
+  schedule:
+    - cron: "0 22 * * *" # УБ 06:00
+    - cron: "0 6 * * *" # УБ 14:00
+  workflow_dispatch:
+
+jobs:
+  scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [worki, lambda]
+    uses: ./.github/workflows/_scan.yml
+    with:
+      source: ${{ matrix.source }}
+    secrets: inherit

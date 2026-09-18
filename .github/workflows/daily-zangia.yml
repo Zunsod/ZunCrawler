@@ -1,0 +1,13 @@
+name: daily-zangia
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # УБ 02:00
+  workflow_dispatch:
+
+jobs:
+  scan:
+    uses: ./.github/workflows/_scan.yml
+    with:
+      source: zangia
+    secrets: inherit
