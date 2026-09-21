@@ -51,3 +51,6 @@ def mark_closed(source, codes, closed_at):
             "closed_at": closed_at,
         }).eq("source", source).in_("job_code", batch).execute()
     return len(codes)
+
+def refresh_jobs_unified():
+    supabase.rpc("refresh_jobs_unified").execute()

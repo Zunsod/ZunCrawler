@@ -3,7 +3,6 @@ import importlib
 from datetime import datetime, timezone
 
 from common import db, scan_log
-from common.config import CLOSE_RATIO_LIMIT
 from common.http import polite_sleep
 from common.config import CLOSE_RATIO_LIMIT, CLOSE_MIN_ABS
 
@@ -89,6 +88,18 @@ def run(name):
     })
     scan_log.record(name, now_iso, datetime.now(timezone.utc).isoformat(), stats)
 
+        # ══ 7. scan_runs ══
+    stats.update({
+        "new_count": inserted,
+        "closed_count": closed_applied,
+        "reopened_count": len(reopened),
+    })
+    scan_log.record(name, now_iso, datetime.now(timezone.utc).isoformat(), stats)
+
+    # ══ 8. jobs_unified шинэчлэх ══
+    db.refresh_jobs_unified()
+    print("jobs_unified шинэчлэгдлээ.")
+
     print(f"[{name}] scan дууслаа.")
 
 
@@ -96,3 +107,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, choices=list(MODULES))
     run(parser.parse_args().source)
+
