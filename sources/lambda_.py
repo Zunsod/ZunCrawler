@@ -8,7 +8,8 @@ from common.http import make_session, get_text
 NAME = "lambda"
 
 JOBS_URL = "https://lambda.global/jobs"
-MAX_PAGES = 60          # 22 орчим хуудас хүлээгдэж байна, нөөцтэй
+LIST_URL = "https://lambda.global/jobs?sortBy=newest"      # шинэ гэсэн эрэмбээр тогтвортой pagination хийнэ
+MAX_PAGES = 60          
 PAGE_DELAY = 1.5
 EMPTY_STREAK_LIMIT = 2  # дараалан шинэ slug гарахгүй бол зогсоно
 
@@ -27,9 +28,9 @@ DECODER = json.JSONDecoder()
 
 
 def _flight_text(html):
-    """Next.js-ийн бүх script блокийг нийлүүлж unescape хийнэ.
+    """Next.js-ийн бүх script блокийг нийлүүлж unescape хийнэ
 
-    JSON нэг объект хоёр push-д тасарч болдог тул заавал нийлүүлж байж parse хийнэ.
+    JSON нэг объект хоёр push-д тасарч болдог тул заавал нийлүүлж байж parse хийнэ
     """
     parts = []
     for chunk in FLIGHT.findall(html):
@@ -41,7 +42,7 @@ def _flight_text(html):
 
 
 def _extract_job(text):
-    """jobCategoryId агуулсан JSON объектыг бүтнээр нь сугалж авна."""
+    """jobCategoryId агуулсан JSON объектыг бүтнээр нь сугалж авна"""
     i = text.find('"jobCategoryId"')
     if i == -1:
         return None
@@ -67,7 +68,7 @@ def list_items():
     ended_naturally = False
 
     while page <= MAX_PAGES:
-        html = get_text(session, f"{JOBS_URL}?page={page}", label=f"page {page}")
+        html = get_text(session, f"{LIST_URL}&page={page}", label=f"page {page}")
 
         if html is None:
             failed_pages.append(page)
@@ -121,4 +122,4 @@ def fetch_detail(code):
 def posted_at(item, detail=None):
     if not detail:
         return None
-    return detail.get("createdAt")   # "2026-08-19T10:24:27.423Z"
+    return detail.get("createdAt")   

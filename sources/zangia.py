@@ -60,6 +60,9 @@ def list_items():
                 meta = data.get("meta", {})
                 api_total = meta.get("total")
                 expected_pages = meta.get("totalPages")
+                if not api_total:
+                    raise RuntimeError(
+                        f"zangia API хоосон хариу өглөө: {str(data)[:300]}")
                 print(f"{NAME}: нийт {api_total} зар — {expected_pages} хуудас")
             last_page_reached = _collect(data, seen)
 
