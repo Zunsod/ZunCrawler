@@ -2,7 +2,7 @@ name: daily-zangia
 
 on:
   schedule:
-    - cron: "0 18 * * *" # УБ 02:00
+    - cron: "0 23 * * *" # УБ 07:00
   workflow_dispatch:
 
 jobs:
