@@ -102,7 +102,6 @@ def run(name):
 
     print(f"[{name}] scan дууслаа.")
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, choices=list(MODULES))
