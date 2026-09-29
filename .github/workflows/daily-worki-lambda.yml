@@ -3,7 +3,6 @@ name: daily-worki-lambda
 on:
   schedule:
     - cron: "0 7 * * *" # УБ 15:00
-    - cron: "0 6 * * *" # УБ 14:00
   workflow_dispatch:
 
 jobs:

@@ -1,18 +1,17 @@
 import argparse
 import importlib
+import time
 from datetime import datetime, timezone
 
 from common import db, scan_log
 from common.http import polite_sleep
 from common.config import CLOSE_RATIO_LIMIT, CLOSE_MIN_ABS
 
-# CLI нэр → module нэр ("lambda" нь Python-ы нөөц үг)
 MODULES = {
     "zangia": "zangia",
     "worki": "worki",
     "lambda": "lambda_",
 }
-
 
 def run(name):
     source = importlib.import_module(f"sources.{MODULES[name]}")

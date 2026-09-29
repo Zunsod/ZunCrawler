@@ -39,7 +39,6 @@ def _collect(data, seen):
             seen[code] = pii.clean_list(item, NAME)
     return (not items) or (not meta.get("hasNextPage"))
 
-
 def list_items():
     """{job_code: list_payload}, stats буцаана."""
     seen = {}
