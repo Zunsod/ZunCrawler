@@ -2,12 +2,6 @@ from common.config import supabase, CHUNK
 
 
 def load_codes(source):
-    """Тухайн source-ийн бүх job_code → is_active.
-
-    .order("id") заавал байх ёстой: эрэмбэгүй .range() хуудаслалт нь
-    хуудас хооронд мөр давхардуулж / алгасч болдог тул зарим код
-    уншигдахгүй өнгөрч, "шинэ зар" гэж буруу тооцогддог.
-    """
     codes = {}
     offset = 0
     while True:
