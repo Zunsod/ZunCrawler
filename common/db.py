@@ -70,5 +70,9 @@ def mark_closed(source, codes, closed_at):
 
 
 def refresh_jobs_unified():
-    """raw_jobs-оос jobs_unified-ийг шинэчилнэ (Supabase дээрх SQL функц)."""
+    """raw_jobs -> jobs_unified-г шинэчилнэ (Supabase дээрх SQL функц)."""
     supabase.rpc("refresh_jobs_unified").execute()
+
+def refresh_jobs_clean():
+    """jobs_unified -> jobs_clean-г шинэчлэнэ (normalize + dedup)."""
+    supabase.rpc("refresh_jobs_clean").execute()

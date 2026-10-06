@@ -8,10 +8,10 @@ from common.http import make_session, post_json
 NAME = "worki"
 
 GQL = "https://graphql.worki.mn/graphql"
-PAGE_SIZE = 100          # 61 зар — нэг хуудсанд багтана
+PAGE_SIZE = 100          
 MAX_PAGES = 50
 PAGE_DELAY = 1.5
-MN_TZ = timezone(timedelta(hours=8))   # Worki огноог цагийн бүсгүй өгдөг
+MN_TZ = timezone(timedelta(hours=8))   
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) "

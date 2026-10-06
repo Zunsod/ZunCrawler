@@ -8,7 +8,7 @@ from common.http import make_session, get_text
 NAME = "lambda"
 
 JOBS_URL = "https://lambda.global/jobs"
-LIST_URL = "https://lambda.global/jobs?sortBy=newest"      # шинэ гэсэн эрэмбээр тогтвортой pagination хийнэ
+LIST_URL = "https://lambda.global/jobs?sortBy=newest"      #тогтвортой pagination
 MAX_PAGES = 60          
 PAGE_DELAY = 1.5
 EMPTY_STREAK_LIMIT = 2  # дараалан шинэ slug гарахгүй бол зогсоно

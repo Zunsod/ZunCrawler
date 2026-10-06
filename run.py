@@ -38,7 +38,7 @@ def run(name):
     print(f"Шинэ: {len(new_codes)} | Хаагдсан: {len(newly_closed)} "
           f"| Дахин нээгдсэн: {len(reopened)}")
 
-    # ══ 4. ШИНЭ зар — detail татаж бичнэ ══
+    # ══ 4. ШИНЭ зар — detail татна ══
     inserted = 0
     detail_failed = []
 
@@ -79,14 +79,6 @@ def run(name):
     else:
         print("Scan дутуу — closure update алгасав.")
 
-    # ══ 7. scan_runs ══
-    stats.update({
-        "new_count": inserted,
-        "closed_count": closed_applied,
-        "reopened_count": len(reopened),
-    })
-    scan_log.record(name, now_iso, datetime.now(timezone.utc).isoformat(), stats)
-
         # ══ 7. scan_runs ══
     stats.update({
         "new_count": inserted,
@@ -98,6 +90,9 @@ def run(name):
     # ══ 8. jobs_unified шинэчлэх ══
     db.refresh_jobs_unified()
     print("jobs_unified шинэчлэгдлээ.")
+
+    db.refresh_jobs_clean()
+    print("jobs_clean шинэчлэгдлээ")
 
     print(f"[{name}] scan дууслаа.")
 
