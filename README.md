@@ -6,7 +6,7 @@
 
 ## Анхаарах зүйл
 
-1. **Transform логик энэ repo-д байхгүй.** `refresh_jobs_unified` ба `refresh_jobs_clean` нь зөвхөн Supabase дээр амьдардаг SQL функц. Table-ийн DDL ч мөн адил. Хувилбарын хяналтгүй, эдгээрийг нөөцлөх механизм repo-д алга. [Эхлээд экспортлох хэрэгтэй](#шилжүүлэх-алхам).
+1. **Transform логик Supabase дээр байна.** `refresh_jobs_unified`, `refresh_jobs_clean` зэрэг SQL функц, DDL-ийг DB дээр шууд өөрчилдөг, migration байхгүй. `db/` дотор байгаа нь 2026-11-02-ны snapshot тул DB-г өөрчилсөн бол [дахин экспортлох](#шилжүүлэх-алхам) хэрэгтэй.
 
 ## Архитектур
 
@@ -20,6 +20,12 @@
                                                             │ rpc refresh_jobs_clean()
                                                             ▼
                                                         jobs_clean
+                                                            │ view (WHERE is_original)
+                                                            ▼
+                                                  fact_jobs, dim_*, dash_*
+                                                            │ refresh_export() (гараар)
+                                                            ▼
+                                                     export.* (table)
 ```
 
 ```
@@ -34,6 +40,9 @@ common/
   http.py              retry-тэй GET/POST
   pii.py               Source бүрийн drop / mask дүрэм
   scan_log.py          scan_runs бичилт
+db/
+  schema.sql           DDL, SQL функц, view (public, marts)
+  reference_data.sql   map_*, dim_date, dim_location-ийн өгөгдөл
 archive/               Хуучирсан script-үүд. Ашиглахгүй.
 .github/workflows/     Одоогийн scheduler
 ```
@@ -90,21 +99,21 @@ Lambda-д нийт зарын тоо API-аас ирдэггүй тул хамр
 | Идэвхтэй              | 6,695                               | 128                        | 567                    |
 | Scan-ий хугацаа\*     | 5–16 мин                            | 5–23 сек                   | 1–2.5 мин              |
 
-\* Сүүлийн 4 өдрийн `scan_runs` (`refresh` ороогүй). Zangia-д өдөрт 50–410 шинэ зар гардаг бөгөөд хугацаа үндсэндээ үүнээс хамаарна.
-
 ## Өгөгдлийн давхарга
 
-| Table          | Зорилго                                           | Мөр    |
-| -------------- | ------------------------------------------------- | ------ |
-| `raw_jobs`     | Эх payload (JSONB), lifecycle төлөв               | 28,112 |
-| `jobs_unified` | Source-уудыг нэг бүтэцтэй болгосон                | 28,112 |
-| `jobs_clean`   | Normalize + dedup. Хэрэглэгчид зориулсан давхарга | 28,112 |
-| `scan_runs`    | Run бүрийн статистик                              | 190    |
+| Объект                              | Зорилго                                                                      | Мөр    |
+| ----------------------------------- | ---------------------------------------------------------------------------- | ------ |
+| `raw_jobs`                          | Эх payload (JSONB), lifecycle төлөв                                          | 28,112 |
+| `jobs_unified`                      | Source-уудыг нэг бүтэцтэй болгосон. Upsert-ээр шинэчилнэ                     | 28,112 |
+| `jobs_clean`                        | `map_*` mapping, цалингийн ангилал, dedup. Run бүрд `TRUNCATE` + дахин бичнэ | 28,112 |
+| `fact_jobs` (view)                  | `jobs_clean WHERE is_original`. `dim_*`, `dash_*` view-үүд үүн дээр суурилна | 6,577  |
+| `map_*`, `dim_location`, `dim_date` | Гараар хөтөлдөг лавлах өгөгдөл (`db/reference_data.sql`)                     | 1,763  |
+| `scan_runs`                         | Run бүрийн статистик                                                         | 190    |
 
 ### Өгөгдөл ашиглахдаа анхаарах
 
-- **Payload нь анх харагдсан үеийн snapshot.** Upsert зөвхөн шинэ зар дээр ажилладаг, дахин нээгдсэн зарыг ч дахин татдаггүй. Иймээс цалин, тайлбар зэрэг нь хожмын өөрчлөлтийг тусгахгүй, `view_count`, `apply_count` нь анхны scan-ий утга хэвээр.
-- **Dedup зөвхөн идэвхтэй Zangia зар дээр ажиллаж байгаа.**
+- **Payload нь анх зар харагдсан үеийн snapshot.** Upsert зөвхөн шинэ зар дээр ажилладаг, дахин нээгдсэн зарыг ч дахин татдаггүй. Иймээс цалин, тайлбар зэрэг нь хожмын өөрчлөлтийг тусгахгүй, `view_count`, `apply_count` нь анхны scan-ий утга хэвээр.
+- **Dedup зөвхөн идэвхтэй Zangia зар дээр ажилладаг.**
 
 ## Scheduler (одоогийн)
 
@@ -113,7 +122,7 @@ Lambda-д нийт зарын тоо API-аас ирдэггүй тул хамр
 | `daily-zangia`       | `17 2 * * *` | 10:17             |
 | `daily-worki-lambda` | `0 7 * * *`  | 15:00             |
 
-Workflow-ууд `_scan.yml`-ийг дууддаг: Python 3.12, `timeout-minutes: 350`, source тус бүрд `concurrency` group. Worki ба Lambda нь matrix-аар зэрэг ажилладаг тул refresh функцүүд зэрэг дуудагдана.
+Workflow-ууд `_scan.yml`-ийг дууддаг: Python 3.12, `timeout-minutes: 350`, source тус бүрд `concurrency` group. Worki ба Lambda нь matrix-аар зэрэг ажилладаг тул refresh функцүүд зэрэг дуудагдах боломжтой. `refresh_jobs_clean` нь `TRUNCATE` хийдэг тул дуустал `jobs_clean`-ийг уншихыг ч түгжинэ.
 
 ## Тохиргоо ба локал ажиллуулах
 
@@ -146,9 +155,10 @@ Scheduler-ээс үл хамаарах гэрээ:
 
 ## Шилжүүлэх алхам
 
-1. **Schema ба SQL функцийг экспортлож repo-д нэмэх.** Supabase-ийн database connection string хэрэгтэй:
+1. **`db/`-г DB-тэй нийцүүлэх.** DB өөрчлөгдсөн бол Supabase-ийн database connection string-ээр дахин экспортлоно:
    ```bash
-   mkdir -p db
-   pg_dump "$SUPABASE_DB_URL" --schema-only --schema=public --no-owner > db/schema.sql
+   pg_dump "$SUPABASE_DB_URL" --schema-only --schema=public --schema=marts --no-owner --no-privileges -f db/schema.sql
+   pg_dump "$SUPABASE_DB_URL" --data-only --column-inserts --no-owner --no-privileges \
+     -t 'public.map_*' -t public.dim_date -t public.dim_location -f db/reference_data.sql
    ```
-2. ETL-д зориулж `raw_jobs`, `scan_runs` бичих, хоёр RPC дуудах эрхтэй тусдаа түлхүүр эсвэл role гаргах.
+   Шинэ DB-д `schema.sql`, дараа нь `reference_data.sql`-ийг ажиллуулна. Энэ сэргээлтийг туршиж үзээгүй. `export` schema-г `refresh_export()` үүсгэдэг тул dump-д ороогүй.
