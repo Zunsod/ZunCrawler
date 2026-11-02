@@ -27,5 +27,4 @@ jobs:
       - name: Scan ${{ inputs.source }}
         run: python run.py --source ${{ inputs.source }}
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

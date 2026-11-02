@@ -1,16 +1,20 @@
-from common.config import supabase
+from common.db import execute
 
 
 def record(source, started_at, finished_at, stats):
-    supabase.table("scan_runs").insert({
-        "source": source,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "pages_scanned": stats.get("pages_scanned", 0),
-        "failed_pages": stats.get("failed_pages", 0),
-        "seen_count": stats.get("seen_count", 0),
-        "new_count": stats.get("new_count", 0),
-        "closed_count": stats.get("closed_count", 0),
-        "reopened_count": stats.get("reopened_count", 0),
-        "scan_completed": stats.get("scan_completed", False),
-    }).execute()
+    execute("""
+        INSERT INTO scan_runs (source, started_at, finished_at, pages_scanned, failed_pages,
+                               seen_count, new_count, closed_count, reopened_count, scan_completed)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        source,
+        started_at,
+        finished_at,
+        stats.get("pages_scanned", 0),
+        stats.get("failed_pages", 0),
+        stats.get("seen_count", 0),
+        stats.get("new_count", 0),
+        stats.get("closed_count", 0),
+        stats.get("reopened_count", 0),
+        stats.get("scan_completed", False),
+    ))

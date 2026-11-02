@@ -1,12 +1,12 @@
 # ZunCrawler
 
-Монголын ажлын зарын гурван сайтаас (Zangia, Worki, Lambda) зар өдөр бүр татаж, Supabase Postgres-д хадгалдаг. Одоогоор GitHub Actions cron дээр ажиллаж байгаа.
+Монголын ажлын зарын гурван сайтаас (Zangia, Worki, Lambda) зар өдөр бүр татаж, PostgreSQL-д хадгалдаг. Одоогоор GitHub Actions cron дээр ажиллаж байгаа.
 
 Энд байгаа тоо бүгд **2026-11-02** өдрийн DB болон GitHub Actions түүхээс авсан утга.
 
 ## Анхаарах зүйл
 
-1. **Transform логик Supabase дээр байна.** `refresh_jobs_unified`, `refresh_jobs_clean` зэрэг SQL функц, DDL-ийг DB дээр шууд өөрчилдөг, migration байхгүй. `db/` дотор байгаа нь 2026-11-02-ны snapshot тул DB-г өөрчилсөн бол [дахин экспортлох](#шилжүүлэх-алхам) хэрэгтэй.
+1. **Transform логик DB дээр байна.** `refresh_jobs_unified`, `refresh_jobs_clean` зэрэг SQL функц, DDL-ийг DB дээр шууд өөрчилдөг, migration байхгүй. `db/` дотор байгаа нь 2026-11-02-ны snapshot тул DB-г өөрчилсөн бол [дахин экспортлох](#шилжүүлэх-алхам) хэрэгтэй.
 
 ## Архитектур
 
@@ -35,7 +35,7 @@ sources/
   worki.py             GraphQL
   lambda_.py           Next.js flight payload-оос JSON сугалдаг (HTML parse)
 common/
-  config.py            Supabase client
+  config.py            DB холболтын тохиргоо, threshold-ууд
   db.py                raw_jobs бичилт
   http.py              retry-тэй GET/POST
   pii.py               Source бүрийн drop / mask дүрэм
@@ -57,7 +57,7 @@ Source бүр гурван функцтэй модуль байна:
 
 Шинэ source нэмэхэд: `sources/`-д модуль бичээд, `run.py`-ийн `MODULES` болон `common/pii.py`-ийн `RULES`-д нэмж, workflow-д бүртгэнэ. SQL функцэд нь нэмэх mapping хэрэгтэй байх магадлалтай.
 
-Supabase-тай холбоотой код зөвхөн `common/config.py`, `common/db.py`, `common/scan_log.py`-д байгаа. Өөр Postgres руу шилжвэл Python талд эдгээрийг л солино.
+DB-тэй холбоотой код зөвхөн `common/config.py`, `common/db.py`, `common/scan_log.py`-д байгаа (`psycopg`).
 
 ## Нэг run-ий урсгал
 
@@ -126,10 +126,9 @@ Workflow-ууд `_scan.yml`-ийг дууддаг: Python 3.12, `timeout-minutes
 
 ## Тохиргоо ба локал ажиллуулах
 
-| Хувьсагч       | Тайлбар              |
-| -------------- | -------------------- |
-| `SUPABASE_URL` | Project URL          |
-| `SUPABASE_KEY` | Одоо `service_role`. |
+| Хувьсагч       | Тайлбар                                                                     |
+| -------------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL` | `postgresql://user:password@host:5432/zuncrawler`. Тусгай тэмдэгтийг encode хийнэ |
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
@@ -146,7 +145,7 @@ Scheduler-ээс үл хамаарах гэрээ:
 | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Команд      | `python run.py --source <name>`, source тус бүр тусдаа task                                                                 |
 | Runtime     | Python 3.12, `requirements.txt`                                                                                             |
-| Сүлжээ      | Гарах HTTPS: `new-api.zangia.mn`, `graphql.worki.mn`, `lambda.global`, Supabase                                             |
+| Сүлжээ      | Гарах HTTPS: `new-api.zangia.mn`, `graphql.worki.mn`, `lambda.global`, PostgreSQL (5432)                                             |
 | Давтамж     | Source тус бүр өдөрт 1 удаа. Цагийн хувьд доорх Zangia тэмдэглэлийг харна                                                   |
 | Timeout     | Өдөр тутам 60 мин (ажиглагдсан хамгийн урт CI run нь 22 мин орчим). Хоосон DB эсвэл шинэ зар их бол цагаар хэмжигдэнэ       |
 | Concurrency | **Нэг source зэрэг хоёр удаа ажиллаж болохгүй.** Хамгаалалт DB эсвэл кодод байхгүй, зөвхөн workflow-ийн `concurrency`-д бий |
